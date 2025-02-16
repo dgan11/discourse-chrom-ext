@@ -18,6 +18,70 @@ function processPostData(postData) {
     };
 }
 
+// Process and summarize post data
+async function processSummaries(data) {
+    try {
+        // Check if we've already processed this post
+        const cacheKey = `processed_${data.currentPost.topic_id}`;
+        const cached = await chrome.storage.local.get([cacheKey]);
+        if (cached[cacheKey]) {
+            console.log('🎯 Using cached summaries');
+            return cached[cacheKey];
+        }
+
+        // Import summarization functions
+        const { summarizePost, summarizeMultiplePosts, generateModResponse } = 
+            await import(chrome.runtime.getURL('services/summarize.js'));
+        
+        // Process the data first
+        const processedData = {
+            currentPost: processPostData(data.currentPost),
+            relatedPosts: Object.entries(data.relatedPosts).reduce((acc, [url, post]) => {
+                acc[url] = processPostData(post);
+                return acc;
+            }, {})
+        };
+
+        console.log('🎯 Processed post data:', processedData);
+        
+        // Generate summaries
+        const currentSummary = await summarizePost(processedData.currentPost.content, 'moderator');
+        const relatedSummaries = await summarizeMultiplePosts(processedData.relatedPosts);
+        
+        // Generate moderator response
+        const modResponse = await generateModResponse(processedData.currentPost, relatedSummaries);
+        
+        // Store results
+        const results = {
+            currentPost: {
+                ...processedData.currentPost,
+                summary: currentSummary
+            },
+            relatedPosts: Object.entries(processedData.relatedPosts).reduce((acc, [url, post]) => {
+                acc[url] = post ? {
+                    ...post,
+                    summary: relatedSummaries[url]
+                } : null;
+                return acc;
+            }, {}),
+            modResponse
+        };
+        
+        // Cache the results
+        await chrome.storage.local.set({ 
+            [cacheKey]: results,
+            processedData: results
+        });
+        
+        console.log('🎭 Summaries and response generated:', results);
+        
+        return results;
+    } catch (error) {
+        console.error('❌🎭 Error processing post data:', error);
+        throw error;
+    }
+}
+
 chrome.storage.local.get(['isConnected'], (result) => {
     if (result.isConnected) {
         initializeDiscourseIntegration();
@@ -48,59 +112,54 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             break;
 
         case 'POST_DATA_READY':
-            // Process and clean the received data
-            const processedData = {
-                currentPost: processPostData(message.data.currentPost),
-                relatedPosts: Object.entries(message.data.relatedPosts).reduce((acc, [url, post]) => {
-                    acc[url] = processPostData(post);
-                    return acc;
-                }, {})
-            };
-            
-            console.log('🎯 Processed post data received:', processedData);
-            
-            // Store the processed data for UI use later
-            chrome.storage.local.set({ 
-                currentPostData: processedData.currentPost,
-                relatedPostsData: processedData.relatedPosts
-            });
+            // Process summaries
+            processSummaries(message.data)
+                .then(results => {
+                    // This will be used by the UI components
+                    chrome.storage.local.set({ 
+                        currentPostData: results.currentPost,
+                        relatedPostsData: results.relatedPosts,
+                        modResponse: results.modResponse
+                    });
+                })
+                .catch(error => {
+                    console.error('Failed to process post data:', error);
+                });
             break;
 
         case 'POST_DATA_ERROR':
             console.error('❌ Error fetching post data:', message.error);
             break;
     }
-    return true; // Keep message channel open for async response
+    return true;
 });
 
-function initializeDiscourseIntegration() {
-  if (!sidebarInitialized) {
-    // Load and initialize the sidebar
-    import(chrome.runtime.getURL('components/sidebar.js'))
-      .then(module => {
-        module.injectSidebar();
-        sidebarInitialized = true;
-        console.log('Discourse integration initialized');
-      })
-      .catch(error => {
-        console.error('Error loading sidebar:', error);
-      });
-  }
+// Initialize the sidebar
+async function initializeDiscourseIntegration() {
+    if (!sidebarInitialized) {
+        try {
+            const { injectSidebar } = await import(chrome.runtime.getURL('components/sidebar.js'));
+            await injectSidebar();
+            sidebarInitialized = true;
+            console.log('Discourse integration initialized');
+        } catch (error) {
+            console.error('Error loading sidebar:', error);
+        }
+    }
 }
 
-function cleanupDiscourseIntegration() {
-  if (sidebarInitialized) {
-    // Remove the sidebar
-    import(chrome.runtime.getURL('components/sidebar.js'))
-      .then(module => {
-        module.removeSidebar();
-        sidebarInitialized = false;
-        console.log('Discourse integration cleaned up');
-      })
-      .catch(error => {
-        console.error('Error removing sidebar:', error);
-      });
-  }
+// Cleanup the sidebar
+async function cleanupDiscourseIntegration() {
+    if (sidebarInitialized) {
+        try {
+            const { removeSidebar } = await import(chrome.runtime.getURL('components/sidebar.js'));
+            await removeSidebar();
+            sidebarInitialized = false;
+            console.log('Discourse integration cleaned up');
+        } catch (error) {
+            console.error('Error removing sidebar:', error);
+        }
+    }
 }
 
 // Main function to initialize the extension
