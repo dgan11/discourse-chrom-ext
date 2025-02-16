@@ -2,23 +2,33 @@
   "manifest_version": 3,
   "name": "Discourse Mod Helper",
   "version": "1.0.0",
-  "description": "Chrome extension to help Discourse Mods",
+  "description": "Chrome extension to help Discourse Mods with context and responses",
   "permissions": [
     "activeTab",
     "storage"
   ],
+  "host_permissions": [
+    "*://*/*"
+  ],
   "action": {
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png"
+    }
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
+      "matches": ["*://*/*"],
       "js": ["content.js"]
     }
   ],
   "background": {
     "service_worker": "background.js"
   },
+  "web_accessible_resources": [{
+    "resources": ["components/*"],
+    "matches": ["*://*/*"]
+  }],
   "icons": {
     "16": "icons/icon16.png"
   }

@@ -1,0 +1,35 @@
+# Cursor Rules for Discourse Helper Extension
+
+## Core Requirements
+1. **Detect Discourse Posts**  
+   - Verify presence of `#related-topics` div  
+
+2. **Fetch Related Posts**  
+   - Scrape all `<a class="title raw-topic-link">` links  
+   - Convert to JSON URLs (`/t/{id} → /t/{id}.json`)  
+
+3. **Summarization Flow**  
+   - Use OpenAI API 
+   - System prompt: "You're a forum assistant. Summarize key solutions from this post in 3 bullets."  
+
+4. **Moderator Response**  
+   - Tone: "Empathetic, concise, solution-focused"  
+   - Structure:  
+     1. Acknowledge user’s issue  
+     2. Reference 1-2 related solutions  
+     3. Offer next steps  
+
+5. **UI Components**  
+   - Inject sidebar with:  
+     - Original post summary  
+     - Related post summaries  
+     - Generated response  
+     - Copy-to-clipboard button  
+
+## Code Generation Prompts
+### For Content Script
+```prompt
+Create a content script that:  
+- Detects when user is on a Discourse post page  
+- Extracts all related topic links from `#related-topics`  
+- Sends list of JSON URLs to background service worker  
