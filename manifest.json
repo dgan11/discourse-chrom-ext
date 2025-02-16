@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Cursor Discourse Extension",
+  "name": "Discourse Mod Helper",
   "version": "1.0.0",
-  "description": "Chrome extension for Cursor Discourse integration",
+  "description": "Chrome extension to help Discourse Mods",
   "permissions": [
     "activeTab",
     "storage"
