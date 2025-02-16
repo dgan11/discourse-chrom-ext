@@ -3,6 +3,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   const statusIndicator = document.getElementById('statusIndicator');
   const actionButton = document.getElementById('actionButton');
   const forumInfo = document.getElementById('forumInfo');
+  const summaryContainer = document.getElementById('summaryContainer');
+  const copyBtn = document.getElementById('copyResponse');
 
   let currentTab = null;
 
@@ -26,6 +28,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       chrome.storage.local.get(['isConnected'], (result) => {
         updateUI(result.isConnected);
       });
+
+      // Get and display summaries if connected
+      updateSummaries();
     } else {
       updateUI(false, 'Not a Discourse forum');
       actionButton.disabled = true;
@@ -37,6 +42,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
+  // Handle connect/disconnect
   actionButton.addEventListener('click', async () => {
     try {
       const currentState = await chrome.storage.local.get(['isConnected']);
@@ -50,9 +56,44 @@ document.addEventListener('DOMContentLoaded', async () => {
         type: 'connectionUpdate', 
         isConnected: newState 
       });
+
+      // Update summaries when connecting
+      if (newState) {
+        updateSummaries();
+      }
     } catch (error) {
       console.error('Error toggling connection:', error);
       updateUI(false, 'Error: Could not update connection');
+    }
+  });
+
+  // Handle copy button
+  copyBtn.addEventListener('click', async () => {
+    const responseText = document.getElementById('modResponse').textContent;
+    try {
+      await navigator.clipboard.writeText(responseText);
+      copyBtn.textContent = 'Copied!';
+      copyBtn.classList.add('copied');
+      setTimeout(() => {
+        copyBtn.textContent = 'Copy Response';
+        copyBtn.classList.remove('copied');
+      }, 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+      copyBtn.textContent = 'Failed';
+      setTimeout(() => {
+        copyBtn.textContent = 'Copy Response';
+      }, 2000);
+    }
+  });
+
+  // Listen for storage changes
+  chrome.storage.onChanged.addListener((changes, namespace) => {
+    if (namespace === 'local') {
+      const relevantKeys = ['currentPostData', 'relatedPostsData', 'modResponse'];
+      if (relevantKeys.some(key => key in changes)) {
+        updateSummaries();
+      }
     }
   });
 
@@ -69,6 +110,45 @@ document.addEventListener('DOMContentLoaded', async () => {
       statusElement.textContent = customStatus;
     } else {
       statusElement.textContent = isConnected ? 'Connected to Discourse' : 'Not connected';
+    }
+
+    // Show/hide summaries
+    summaryContainer.style.display = isConnected ? 'block' : 'none';
+  }
+
+  async function updateSummaries() {
+    try {
+      const data = await chrome.storage.local.get([
+        'currentPostData',
+        'relatedPostsData',
+        'modResponse'
+      ]);
+
+      // Update current post summary
+      if (data.currentPostData?.summary) {
+        document.getElementById('currentSummary').textContent = data.currentPostData.summary;
+      }
+
+      // Update mod response
+      if (data.modResponse) {
+        document.getElementById('modResponse').textContent = data.modResponse;
+      }
+
+      // Update related summaries
+      if (data.relatedPostsData) {
+        const relatedHtml = Object.entries(data.relatedPostsData)
+          .filter(([_, post]) => post && post.summary)
+          .map(([url, post]) => `
+            <div class="related-post">
+              <strong>${post.title || 'Related Post'}</strong>
+              <p>${post.summary}</p>
+            </div>
+          `).join('') || 'No related posts found';
+        
+        document.getElementById('relatedSummaries').innerHTML = relatedHtml;
+      }
+    } catch (error) {
+      console.error('Error updating summaries:', error);
     }
   }
 }); 

@@ -21,14 +21,6 @@ function processPostData(postData) {
 // Process and summarize post data
 async function processSummaries(data) {
     try {
-        // Check if we've already processed this post
-        const cacheKey = `processed_${data.currentPost.topic_id}`;
-        const cached = await chrome.storage.local.get([cacheKey]);
-        if (cached[cacheKey]) {
-            console.log('🎯 Using cached summaries');
-            return cached[cacheKey];
-        }
-
         // Import summarization functions
         const { summarizePost, summarizeMultiplePosts, generateModResponse } = 
             await import(chrome.runtime.getURL('services/summarize.js'));
@@ -67,10 +59,11 @@ async function processSummaries(data) {
             modResponse
         };
         
-        // Cache the results
+        // Store in extension storage
         await chrome.storage.local.set({ 
-            [cacheKey]: results,
-            processedData: results
+            currentPostData: results.currentPost,
+            relatedPostsData: results.relatedPosts,
+            modResponse: results.modResponse
         });
         
         console.log('🎭 Summaries and response generated:', results);
@@ -94,6 +87,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         case 'connectionUpdate':
             if (message.isConnected) {
                 initializeDiscourseIntegration();
+                // Re-process current post when connecting
+                initDiscourseHelper();
             } else {
                 cleanupDiscourseIntegration();
             }
@@ -115,12 +110,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             // Process summaries
             processSummaries(message.data)
                 .then(results => {
-                    // This will be used by the UI components
-                    chrome.storage.local.set({ 
-                        currentPostData: results.currentPost,
-                        relatedPostsData: results.relatedPosts,
-                        modResponse: results.modResponse
-                    });
+                    console.log('✅ Successfully processed post data');
                 })
                 .catch(error => {
                     console.error('Failed to process post data:', error);
@@ -136,28 +126,38 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 // Initialize the sidebar
 async function initializeDiscourseIntegration() {
+    console.log('🚀 Initializing Discourse integration...');
+    console.log('Current sidebar state:', sidebarInitialized);
+    
     if (!sidebarInitialized) {
         try {
+            console.log('📦 Importing sidebar module...');
             const { injectSidebar } = await import(chrome.runtime.getURL('components/sidebar.js'));
+            console.log('💉 Injecting sidebar...');
             await injectSidebar();
             sidebarInitialized = true;
-            console.log('Discourse integration initialized');
+            console.log('✅ Discourse integration initialized successfully');
         } catch (error) {
-            console.error('Error loading sidebar:', error);
+            console.error('❌ Error loading sidebar:', error);
+            console.error('Error details:', {
+                message: error.message,
+                stack: error.stack
+            });
         }
     }
 }
 
 // Cleanup the sidebar
 async function cleanupDiscourseIntegration() {
+    console.log('🧹 Cleaning up Discourse integration...');
     if (sidebarInitialized) {
         try {
             const { removeSidebar } = await import(chrome.runtime.getURL('components/sidebar.js'));
             await removeSidebar();
             sidebarInitialized = false;
-            console.log('Discourse integration cleaned up');
+            console.log('✅ Discourse integration cleaned up');
         } catch (error) {
-            console.error('Error removing sidebar:', error);
+            console.error('❌ Error removing sidebar:', error);
         }
     }
 }
