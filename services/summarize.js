@@ -14,8 +14,8 @@ async function getApiKey() {
 // Helper to create a system message for different summary types
 function getSystemPrompt(type = 'default') {
     const prompts = {
-        default: "You're a technical assistant. Summarize the key problem and any solutions mentioned in 3 bullet points.",
-        moderator: "You're a friendly community manager. Keep responses super short (max 2 sentences), casual, and direct. Always include the relevant contact email if the user needs support. Use 'hey @user' format.",
+        default: "You're a technical assistant summarizing a forum post for moderators. Focus on the key issue, relevant context, and current status. Summarize in 3 concise bullet points without any greetings or pleasantries.",
+        moderator: "You're a forum moderator. Keep responses super short (max 2 sentences), direct, and use '@username' format (not their real name). Always include hi@cursor.com for billing/subscription issues. Use '!'.",
         solution: "Focus only on solutions mentioned in the text. List them as actionable bullet points.",
     };
     return prompts[type] || prompts.default;
@@ -106,11 +106,19 @@ ${currentPost.content}
 Context from related posts:
 ${context}
 
-Based on the above, generate an empathetic moderator response that:
-1. Acknowledges the user's concern
-2. References relevant solutions from related posts
-3. Provides clear next steps
-4. Maintains a helpful and understanding tone`;
+Based on the above, generate an empathetic moderator response that is super succinct that:
+first see classify if there is a problem. Be super succinct but warm in a response. Make sure to use "!".
+If this is an issue with billing (only if they mention something about being charged or payment) just say that they need to email hi@cursor.com and you will be happy to 
+take a look! This should not be mentioned for normal issues though.
+
+Never qualify anything or say things like
+"""
+- "it sounds like"
+- "you're feeling frustrated by ..."
+- "that's completely understandable"
+- "Thank you for sharing your thoughts"
+"""
+`;
 
         console.log('🤖 Generating mod response...');
         console.log('📝 Using prompt:', prompt);
@@ -126,7 +134,10 @@ Based on the above, generate an empathetic moderator response that:
                 messages: [
                     { 
                         role: 'system', 
-                        content: "You are an empathetic forum moderator. Your goal is to provide helpful, understanding responses that address both the technical and emotional aspects of user posts."
+                        content: `
+                        You are an empathetic forum moderator that is warm yet succinct. Do not qualify.
+                        you get to the point and use atleast one "!". Max reply length should ideally 5-10 words
+                        and no more than 20 unless there is a ton of things to address or explain`
                     },
                     { role: 'user', content: prompt }
                 ],

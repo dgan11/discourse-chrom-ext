@@ -138,12 +138,28 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (data.relatedPostsData) {
         const relatedHtml = Object.entries(data.relatedPostsData)
           .filter(([_, post]) => post && post.summary)
-          .map(([url, post]) => `
-            <div class="related-post">
-              <strong>${post.title || 'Related Post'}</strong>
-              <p>${post.summary}</p>
-            </div>
-          `).join('') || 'No related posts found';
+          .slice(0, 3) // Limit to 3 posts
+          .map(([url, post]) => {
+            // Split summary into bullet points and filter out empty ones
+            const bulletPoints = post.summary
+              .split('\n')
+              .map(point => point.trim())
+              .filter(point => point && point.length > 0)
+              .map(point => {
+                // Remove leading dash or bullet if present
+                point = point.replace(/^[-•]\s*/, '');
+                return `<li>${point.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')}</li>`;
+              })
+              .slice(0, 3) // Limit to 3 bullet points
+              .join('');
+
+            return `
+              <div class="related-post">
+                <strong>${post.title || 'Related Post'}</strong>
+                <ul>${bulletPoints}</ul>
+              </div>
+            `;
+          }).join('') || 'No related posts found';
         
         document.getElementById('relatedSummaries').innerHTML = relatedHtml;
       }
