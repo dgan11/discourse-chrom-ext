@@ -5,7 +5,8 @@
   "description": "Chrome extension to help Discourse Mods with context and responses",
   "permissions": [
     "activeTab",
-    "storage"
+    "storage",
+    "tabs"
   ],
   "host_permissions": [
     "*://*/*"
@@ -23,10 +24,14 @@
     }
   ],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.js",
+    "type": "module"
   },
   "web_accessible_resources": [{
-    "resources": ["components/*"],
+    "resources": [
+      "components/*",
+      "utils/*"
+    ],
     "matches": ["*://*/*"]
   }],
   "icons": {

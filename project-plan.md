@@ -21,7 +21,7 @@
 - **Files**:
   - `services/summarize.js`  
 - **Cursor Prompt**:  
-  *"Create a function that sends cleaned post content to OpenAI's API and returns a GPT-4 summary with the prompt 'Summarize this post's problem and solutions in 3 bullets'."*
+  *"Create a function that sends cleaned post content to OpenAI's API and returns a 4o-mini summary with the prompt 'Summarize this post's problem and solutions in 3 bullets'."*
 
 ## Stage 4: UI Injection
 - [ ] **Goal**: Show summaries in a sidebar  

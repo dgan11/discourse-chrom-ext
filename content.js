@@ -1,36 +1,76 @@
 // Initialize connection state
 let sidebarInitialized = false;
 
+// Helper to strip HTML tags and clean text
+function stripHtml(html) {
+    const temp = document.createElement('div');
+    temp.innerHTML = html;
+    return temp.textContent || temp.innerText || '';
+}
+
+// Process post data to clean HTML content
+function processPostData(postData) {
+    if (!postData) return null;
+    return {
+        ...postData,
+        content: stripHtml(postData.content),
+        rawContent: postData.rawContent
+    };
+}
+
 chrome.storage.local.get(['isConnected'], (result) => {
-  if (result.isConnected) {
-    initializeDiscourseIntegration();
-  }
+    if (result.isConnected) {
+        initializeDiscourseIntegration();
+    }
 });
 
-// Listen for messages from popup
+// Listen for messages from popup and background
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  switch (message.type) {
-    case 'connectionUpdate':
-      if (message.isConnected) {
-        initializeDiscourseIntegration();
-      } else {
-        cleanupDiscourseIntegration();
-      }
-      break;
-    
-    case 'checkDiscourse':
-      const isDiscourse = isDiscourseForum();
-      if (isDiscourse) {
-        sendResponse({ 
-          isDiscourse: true,
-          forumInfo: getForumInfo()
-        });
-      } else {
-        sendResponse({ isDiscourse: false });
-      }
-      break;
-  }
-  return true; // Keep message channel open for async response
+    switch (message.type) {
+        case 'connectionUpdate':
+            if (message.isConnected) {
+                initializeDiscourseIntegration();
+            } else {
+                cleanupDiscourseIntegration();
+            }
+            break;
+        
+        case 'checkDiscourse':
+            const isDiscourse = isDiscourseForum();
+            if (isDiscourse) {
+                sendResponse({ 
+                    isDiscourse: true,
+                    forumInfo: getForumInfo()
+                });
+            } else {
+                sendResponse({ isDiscourse: false });
+            }
+            break;
+
+        case 'POST_DATA_READY':
+            // Process and clean the received data
+            const processedData = {
+                currentPost: processPostData(message.data.currentPost),
+                relatedPosts: Object.entries(message.data.relatedPosts).reduce((acc, [url, post]) => {
+                    acc[url] = processPostData(post);
+                    return acc;
+                }, {})
+            };
+            
+            console.log('🎯 Processed post data received:', processedData);
+            
+            // Store the processed data for UI use later
+            chrome.storage.local.set({ 
+                currentPostData: processedData.currentPost,
+                relatedPostsData: processedData.relatedPosts
+            });
+            break;
+
+        case 'POST_DATA_ERROR':
+            console.error('❌ Error fetching post data:', message.error);
+            break;
+    }
+    return true; // Keep message channel open for async response
 });
 
 function initializeDiscourseIntegration() {
@@ -82,7 +122,7 @@ async function initDiscourseHelper() {
         postDate: document.querySelector('.topic-post .post-date')?.textContent.trim()
     };
 
-    console.log('Discourse post detected:', postInfo);
+    console.log('🐽 Discourse post detected:', postInfo);
 
     // Send data to background script
     chrome.runtime.sendMessage({
