@@ -25,35 +25,45 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 // Handle post detection
 async function handlePostDetection(postInfo, tabId) {
-  // Clear previous cache for this tab
+  // Only clear specific URL cache instead of all cache
   if (tabCache.has(tabId)) {
-    postCache.delete(tabCache.get(tabId));
+    const oldUrl = tabCache.get(tabId);
+    if (oldUrl !== postInfo.currentUrl) {
+      postCache.delete(oldUrl);
+    }
   }
   tabCache.set(tabId, postInfo.currentUrl);
+  
+  // Check if we already have this post cached
+  if (postCache.has(postInfo.currentUrl)) {
+    const cachedData = postCache.get(postInfo.currentUrl);
+    chrome.tabs.sendMessage(tabId, {
+      type: 'POST_DATA_READY',
+      data: cachedData
+    });
+    return;
+  }
   
   try {
     // Get current post data
     const currentPostData = await fetchPostData(postInfo.currentUrl);
     
-    // Cache the current post data
-    postCache.set(postInfo.currentUrl, currentPostData);
-    
     // Get related posts data
     const relatedUrls = postInfo.relatedTopics.map(topic => topic.jsonUrl);
     const relatedPostsData = await fetchMultiplePosts(relatedUrls);
     
-    // Cache related posts data
-    Object.entries(relatedPostsData).forEach(([url, data]) => {
-      if (data) postCache.set(url, data);
-    });
+    const fullData = {
+      currentPost: currentPostData,
+      relatedPosts: relatedPostsData
+    };
+    
+    // Cache the full data
+    postCache.set(postInfo.currentUrl, fullData);
     
     // Send the processed data back to content script
     chrome.tabs.sendMessage(tabId, {
       type: 'POST_DATA_READY',
-      data: {
-        currentPost: currentPostData,
-        relatedPosts: relatedPostsData
-      }
+      data: fullData
     });
     
   } catch (error) {
@@ -72,7 +82,23 @@ function getCachedPost(url) {
 
 // Clear cache when tab is closed
 chrome.tabs.onRemoved.addListener((tabId) => {
-  postCache.clear();
+  if (tabCache.has(tabId)) {
+    postCache.delete(tabCache.get(tabId));
+    tabCache.delete(tabId);
+  }
+});
+
+// Handle URL changes
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.url) {
+    if (tabCache.has(tabId)) {
+      const oldUrl = tabCache.get(tabId);
+      if (oldUrl !== changeInfo.url) {
+        postCache.delete(oldUrl);
+        tabCache.delete(tabId);
+      }
+    }
+  }
 });
 
 // Add new listener

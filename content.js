@@ -1,6 +1,3 @@
-// Initialize connection state
-let sidebarInitialized = false;
-
 // Helper to strip HTML tags and clean text
 function stripHtml(html) {
     const temp = document.createElement('div');
@@ -75,25 +72,9 @@ async function processSummaries(data) {
     }
 }
 
-chrome.storage.local.get(['isConnected'], (result) => {
-    if (result.isConnected) {
-        initializeDiscourseIntegration();
-    }
-});
-
 // Listen for messages from popup and background
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     switch (message.type) {
-        case 'connectionUpdate':
-            if (message.isConnected) {
-                initializeDiscourseIntegration();
-                // Re-process current post when connecting
-                initDiscourseHelper();
-            } else {
-                cleanupDiscourseIntegration();
-            }
-            break;
-        
         case 'checkDiscourse':
             const isDiscourse = isDiscourseForum();
             if (isDiscourse) {
@@ -123,44 +104,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     return true;
 });
-
-// Initialize the sidebar
-async function initializeDiscourseIntegration() {
-    console.log('🚀 Initializing Discourse integration...');
-    console.log('Current sidebar state:', sidebarInitialized);
-    
-    if (!sidebarInitialized) {
-        try {
-            console.log('📦 Importing sidebar module...');
-            const { injectSidebar } = await import(chrome.runtime.getURL('components/sidebar.js'));
-            console.log('💉 Injecting sidebar...');
-            await injectSidebar();
-            sidebarInitialized = true;
-            console.log('✅ Discourse integration initialized successfully');
-        } catch (error) {
-            console.error('❌ Error loading sidebar:', error);
-            console.error('Error details:', {
-                message: error.message,
-                stack: error.stack
-            });
-        }
-    }
-}
-
-// Cleanup the sidebar
-async function cleanupDiscourseIntegration() {
-    console.log('🧹 Cleaning up Discourse integration...');
-    if (sidebarInitialized) {
-        try {
-            const { removeSidebar } = await import(chrome.runtime.getURL('components/sidebar.js'));
-            await removeSidebar();
-            sidebarInitialized = false;
-            console.log('✅ Discourse integration cleaned up');
-        } catch (error) {
-            console.error('❌ Error removing sidebar:', error);
-        }
-    }
-}
 
 // Main function to initialize the extension
 async function initDiscourseHelper() {
@@ -192,8 +135,6 @@ async function initDiscourseHelper() {
         type: 'POST_DETECTED',
         data: postInfo
     });
-
-    // TODO: Inject UI components (will be implemented in Stage 4)
 }
 
 // Check if current site is a Discourse forum
@@ -296,7 +237,31 @@ function getRelatedTopics() {
 
 // Initialize when DOM is fully loaded
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initDiscourseHelper);
+    document.addEventListener('DOMContentLoaded', () => {
+        initDiscourseHelper();
+        setupUrlObserver();
+    });
 } else {
     initDiscourseHelper();
+    setupUrlObserver();
+}
+
+// Setup URL change observer
+function setupUrlObserver() {
+    let lastUrl = window.location.href;
+    
+    // Create observer for URL changes
+    const observer = new MutationObserver(() => {
+        if (lastUrl !== window.location.href) {
+            lastUrl = window.location.href;
+            console.log('🔄 URL changed, reinitializing...');
+            initDiscourseHelper();
+        }
+    });
+
+    // Observe changes to the body
+    observer.observe(document.body, {
+        childList: true,
+        subtree: true
+    });
 } 
