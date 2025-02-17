@@ -2,6 +2,7 @@
 <html>
 <head>
   <title>Discourse Mod Helper</title>
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
   <style>
     /* Scoped to extension popup only */
     .discourse-helper-popup {
@@ -71,6 +72,11 @@
 
     .discourse-helper-popup .button.connected:hover {
       background-color: #dc2626;
+    }
+
+    .discourse-helper-popup .button:disabled {
+      background-color: #ccc;
+      cursor: not-allowed;
     }
 
     .discourse-helper-popup .forum-info {
@@ -155,6 +161,83 @@
       color: #333;
       font-weight: 600;
     }
+
+    .button {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid #ffffff;
+      border-top: 2px solid transparent;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .post-title {
+      font-size: 14px;
+      color: #666;
+      margin-top: 8px;
+      font-weight: 500;
+      display: none;
+    }
+
+    .post-title.visible {
+      display: block;
+    }
+
+    .button-container {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .refresh-button {
+      padding: 4px;
+      border: none;
+      border-radius: 4px;
+      background-color: #4a90e2;
+      color: white;
+      cursor: pointer;
+      display: none;
+    }
+
+    .refresh-button:hover {
+      background-color: #357abd;
+    }
+
+    .refresh-button .spinner {
+      width: 14px;
+      height: 14px;
+    }
+
+    .refresh-button.visible {
+      display: flex;
+    }
+
+    .content-spinner {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px 0;
+    }
+
+    .content-spinner .spinner {
+      width: 24px;
+      height: 24px;
+      border: 2px solid #4a90e2;
+      border-top: 2px solid transparent;
+    }
   </style>
 </head>
 <body class="discourse-helper-popup">
@@ -169,30 +252,51 @@
       <div id="forumInfo" class="forum-info">
         Not on a Discourse forum
       </div>
+      <div id="currentPostTitle" class="post-title"></div>
     </div>
 
-    <button id="actionButton" class="button">Connect</button>
+    <div class="button-container">
+      <button id="actionButton" class="button">
+        <span class="button-text">Summarize</span>
+        <div class="spinner" style="display: none;"></div>
+      </button>
+      <button id="refreshButton" class="refresh-button">
+        <span class="material-icons">refresh</span>
+        <div class="spinner" style="display: none;"></div>
+      </button>
+    </div>
 
     <!-- Summary sections (hidden by default) -->
     <div id="summaryContainer" style="display: none;">
       <div class="summary-section">
         <h2>Current Post Summary</h2>
         <div id="currentSummary" class="summary-content">
-          • Pro subscriber reports monthly fast requests quota not resetting (subscribed Sept 22, 423/500 requests showing)
-          • User believes counter hasn't reset since initial subscription in September
-          • Already contacted hi@cursor.com, awaiting response
+          <div class="content-spinner" style="display: none;">
+            <div class="spinner"></div>
+          </div>
+          <div class="content-text"></div>
         </div>
       </div>
 
       <div class="summary-section mod-response">
         <h2>Moderator Response</h2>
-        <div id="modResponse" class="summary-content">Loading...</div>
+        <div id="modResponse" class="summary-content">
+          <div class="content-spinner" style="display: none;">
+            <div class="spinner"></div>
+          </div>
+          <div class="content-text"></div>
+        </div>
         <button id="copyResponse" class="copy-btn">Copy Response</button>
       </div>
 
       <div class="summary-section">
         <h2>Related Posts</h2>
-        <div id="relatedSummaries" class="summary-content">Loading...</div>
+        <div id="relatedSummaries" class="summary-content">
+          <div class="content-spinner" style="display: none;">
+            <div class="spinner"></div>
+          </div>
+          <div class="content-text"></div>
+        </div>
       </div>
     </div>
   </div>

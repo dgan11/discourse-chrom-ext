@@ -170,15 +170,19 @@ async function initDiscourseHelper() {
     // Only proceed if this is a topic page
     if (!isDiscoursePost()) return;
     
+    // Add at top of initDiscourseHelper
+    if (window.location.href === window.__lastProcessedUrl) return;
+    window.__lastProcessedUrl = window.location.href;
+
     // Extract post information
     const postInfo = {
         currentUrl: window.location.href,
         forumInfo: getForumInfo(),
         relatedTopics: getRelatedTopics(),
-        postTitle: document.querySelector('.fancy-title')?.textContent.trim(),
-        postContent: document.querySelector('.topic-post .cooked')?.innerHTML,
-        postAuthor: document.querySelector('.topic-post .username')?.textContent.trim(),
-        postDate: document.querySelector('.topic-post .post-date')?.textContent.trim()
+        postTitle: document.querySelector('.topic-post:first-child .fancy-title')?.textContent.trim(),
+        postContent: document.querySelector('.topic-post:first-child .cooked')?.innerHTML,
+        postAuthor: document.querySelector('.topic-post:first-child .username')?.textContent.trim(),
+        postDate: document.querySelector('.topic-post:first-child .post-date')?.textContent.trim()
     };
 
     console.log('🐽 Discourse post detected:', postInfo);
@@ -194,12 +198,44 @@ async function initDiscourseHelper() {
 
 // Check if current site is a Discourse forum
 function isDiscourseForum() {
-    // Check for common Discourse elements and meta tags
-    return (
-        document.querySelector('meta[name="generator"][content*="Discourse"]') !== null ||
-        document.querySelector('#main-outlet') !== null ||
-        document.querySelector('.d-header') !== null
-    );
+    try {
+        // Check multiple indicators of a Discourse forum
+        const discourseIndicators = [
+            // Meta tag check
+            () => document.querySelector('meta[name="generator"][content*="Discourse"]') !== null,
+            // Common Discourse elements
+            () => document.querySelector('#main-outlet') !== null,
+            () => document.querySelector('.d-header') !== null,
+            // Additional Discourse-specific elements
+            () => document.querySelector('.discourse-root') !== null,
+            () => document.querySelector('.topic-body') !== null,
+            () => document.querySelector('.topic-post') !== null,
+            // URL pattern check
+            () => /\/t\/([^\/]+)\/(\d+)/.test(window.location.pathname),
+            // Common Discourse classes
+            () => document.querySelector('.archetype-regular') !== null,
+            () => document.querySelector('.crawler-nav') !== null
+        ];
+
+        // Check each indicator and log results for debugging
+        const results = discourseIndicators.map(check => {
+            try {
+                return check();
+            } catch (e) {
+                console.error('Error checking Discourse indicator:', e);
+                return false;
+            }
+        });
+
+        const isDiscourse = results.some(result => result === true);
+        console.log('🔍 Discourse detection results:', results);
+        console.log('📊 Is Discourse forum:', isDiscourse);
+        
+        return isDiscourse;
+    } catch (error) {
+        console.error('❌ Error in isDiscourseForum:', error);
+        return false;
+    }
 }
 
 // Check if current page is a Discourse post

@@ -2,15 +2,49 @@ document.addEventListener('DOMContentLoaded', async () => {
   const statusElement = document.getElementById('status');
   const statusIndicator = document.getElementById('statusIndicator');
   const actionButton = document.getElementById('actionButton');
+  const buttonText = actionButton.querySelector('.button-text');
+  const spinner = actionButton.querySelector('.spinner');
   const forumInfo = document.getElementById('forumInfo');
+  const currentPostTitle = document.getElementById('currentPostTitle');
   const summaryContainer = document.getElementById('summaryContainer');
   const copyBtn = document.getElementById('copyResponse');
+  const refreshButton = document.getElementById('refreshButton');
 
   let currentTab = null;
+  let currentPostData = null;
+  let isProcessing = false;
+  let currentPostUrl = null;
+
+  function setLoading(isLoading, isRefresh = false) {
+    const targetButton = isRefresh ? refreshButton : actionButton;
+    const targetSpinner = targetButton.querySelector('.spinner');
+    const targetText = targetButton.querySelector(isRefresh ? '.material-icons' : '.button-text');
+
+    targetText.style.display = isLoading ? 'none' : 'block';
+    targetSpinner.style.display = isLoading ? 'block' : 'none';
+    targetButton.disabled = isLoading;
+
+    if (!isRefresh) {
+      buttonText.textContent = isLoading ? 'Summarizing...' : 'Summarize';
+    }
+  }
+
+  function setContentLoading(isLoading) {
+    const sections = ['currentSummary', 'modResponse', 'relatedSummaries'];
+    sections.forEach(id => {
+      const section = document.getElementById(id);
+      const spinner = section.querySelector('.content-spinner');
+      const content = section.querySelector('.content-text');
+      
+      spinner.style.display = isLoading ? 'flex' : 'none';
+      content.style.display = isLoading ? 'none' : 'block';
+    });
+  }
 
   // Get current tab
   try {
     [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    currentPostUrl = currentTab.url;
   } catch (error) {
     console.error('Error getting current tab:', error);
     updateUI(false, 'Error: Could not access tab');
@@ -20,52 +54,105 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Check if we're on a Discourse forum
   try {
     const response = await chrome.tabs.sendMessage(currentTab.id, { type: 'checkDiscourse' });
-    if (response && response.isDiscourse) {
-      forumInfo.textContent = `Forum: ${response.forumInfo.name}`;
+    
+    if (!response) {
+      console.error('No response from content script');
+      updateUI(false, 'Error: Extension not initialized. Please refresh the page.');
+      return;
+    }
+    
+    if (response.isDiscourse) {
+      forumInfo.textContent = `Forum: ${response.forumInfo?.name || 'Unknown'}`;
       forumInfo.classList.add('visible');
       
-      // Initialize UI state
-      chrome.storage.local.get(['isConnected'], (result) => {
-        updateUI(result.isConnected);
-      });
-
-      // Get and display summaries if connected
-      updateSummaries();
+      // Check if we already have summaries for this post
+      const data = await chrome.storage.local.get(['currentPostData', 'lastProcessedUrl']);
+      if (data.currentPostData && data.lastProcessedUrl === currentPostUrl) {
+        currentPostTitle.textContent = data.currentPostData.title || 'Current Post';
+        currentPostTitle.classList.add('visible');
+        summaryContainer.style.display = 'block';
+        actionButton.disabled = true;
+        buttonText.textContent = 'Already Summarized';
+        refreshButton.classList.add('visible');
+        updateSummaries();
+      }
     } else {
-      updateUI(false, 'Not a Discourse forum');
+      updateUI(false, 'Not a Discourse forum. Visit a Discourse forum to use this extension.');
       actionButton.disabled = true;
       return;
     }
   } catch (error) {
     console.error('Error checking Discourse:', error);
-    updateUI(false, 'Error: Could not detect forum');
+    if (error.message.includes('Could not establish connection')) {
+      updateUI(false, 'Error: Please refresh the page to initialize the extension.');
+    } else {
+      updateUI(false, 'Error: Could not detect forum. Please refresh the page.');
+    }
     return;
   }
 
-  // Handle connect/disconnect
-  actionButton.addEventListener('click', async () => {
+  async function handleSummarization(isRefresh = false) {
+    if (isProcessing) return;
+    
     try {
-      const currentState = await chrome.storage.local.get(['isConnected']);
-      const newState = !currentState.isConnected;
+      isProcessing = true;
+      setLoading(true, isRefresh);
       
-      await chrome.storage.local.set({ isConnected: newState });
-      updateUI(newState);
+      // Show loading spinners if refreshing
+      if (isRefresh) {
+        setContentLoading(true);
+      }
 
-      // Notify content script of state change
+      // Store the URL we're processing
+      await chrome.storage.local.set({ 
+        isConnected: true,
+        lastProcessedUrl: currentPostUrl 
+      });
+      
+      // Notify content script to start processing
       chrome.tabs.sendMessage(currentTab.id, { 
         type: 'connectionUpdate', 
-        isConnected: newState 
+        isConnected: true 
       });
 
-      // Update summaries when connecting
-      if (newState) {
-        updateSummaries();
-      }
+      // Wait for summaries to be generated
+      const checkSummaries = async () => {
+        const data = await chrome.storage.local.get(['currentPostData', 'modResponse']);
+        if (data.currentPostData && data.modResponse) {
+          setLoading(false, isRefresh);
+          setContentLoading(false);
+          summaryContainer.style.display = 'block';
+          currentPostTitle.textContent = data.currentPostData.title || 'Current Post';
+          currentPostTitle.classList.add('visible');
+          
+          if (!isRefresh) {
+            actionButton.disabled = true;
+            buttonText.textContent = 'Already Summarized';
+            refreshButton.classList.add('visible');
+          }
+          
+          updateSummaries();
+          isProcessing = false;
+        } else {
+          setTimeout(checkSummaries, 500);
+        }
+      };
+
+      checkSummaries();
     } catch (error) {
-      console.error('Error toggling connection:', error);
-      updateUI(false, 'Error: Could not update connection');
+      console.error('Error during summarization:', error);
+      setLoading(false, isRefresh);
+      setContentLoading(false);
+      updateUI(false, 'Error: Could not generate summaries');
+      isProcessing = false;
     }
-  });
+  }
+
+  // Handle summarize action
+  actionButton.addEventListener('click', () => handleSummarization(false));
+
+  // Handle refresh action
+  refreshButton.addEventListener('click', () => handleSummarization(true));
 
   // Handle copy button
   copyBtn.addEventListener('click', async () => {
@@ -90,18 +177,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Listen for storage changes
   chrome.storage.onChanged.addListener((changes, namespace) => {
     if (namespace === 'local') {
-      const relevantKeys = ['currentPostData', 'relatedPostsData', 'modResponse'];
-      if (relevantKeys.some(key => key in changes)) {
-        updateSummaries();
+      const hasUpdates = ['currentPostData', 'relatedPostsData', 'modResponse']
+        .some(key => key in changes);
+      
+      if (hasUpdates) {
+        requestAnimationFrame(() => updateSummaries());
       }
     }
   });
 
   function updateUI(isConnected, customStatus) {
-    // Update button
-    actionButton.textContent = isConnected ? 'Disconnect' : 'Connect';
-    actionButton.classList.toggle('connected', isConnected);
-    
     // Update status indicator
     statusIndicator.classList.toggle('connected', isConnected);
     
@@ -109,11 +194,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (customStatus) {
       statusElement.textContent = customStatus;
     } else {
-      statusElement.textContent = isConnected ? 'Connected to Discourse' : 'Not connected';
+      statusElement.textContent = isConnected ? 'Ready to summarize' : 'Not connected';
     }
-
-    // Show/hide summaries
-    summaryContainer.style.display = isConnected ? 'block' : 'none';
   }
 
   async function updateSummaries() {
@@ -126,12 +208,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       // Update current post summary
       if (data.currentPostData?.summary) {
-        document.getElementById('currentSummary').textContent = data.currentPostData.summary;
+        document.getElementById('currentSummary').querySelector('.content-text').textContent = data.currentPostData.summary;
       }
 
       // Update mod response
       if (data.modResponse) {
-        document.getElementById('modResponse').textContent = data.modResponse;
+        document.getElementById('modResponse').querySelector('.content-text').textContent = data.modResponse;
       }
 
       // Update related summaries
@@ -161,7 +243,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             `;
           }).join('') || 'No related posts found';
         
-        document.getElementById('relatedSummaries').innerHTML = relatedHtml;
+        document.getElementById('relatedSummaries').querySelector('.content-text').innerHTML = relatedHtml;
       }
     } catch (error) {
       console.error('Error updating summaries:', error);

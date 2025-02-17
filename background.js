@@ -3,6 +3,7 @@ import { fetchPostData, fetchMultiplePosts } from './utils/fetchPosts.js';
 
 // Cache for post data
 const postCache = new Map();
+const tabCache = new Map();
 
 // Initialize extension state when installed
 chrome.runtime.onInstalled.addListener(() => {
@@ -24,6 +25,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 // Handle post detection
 async function handlePostDetection(postInfo, tabId) {
+  // Clear previous cache for this tab
+  if (tabCache.has(tabId)) {
+    postCache.delete(tabCache.get(tabId));
+  }
+  tabCache.set(tabId, postInfo.currentUrl);
+  
   try {
     // Get current post data
     const currentPostData = await fetchPostData(postInfo.currentUrl);
@@ -66,4 +73,13 @@ function getCachedPost(url) {
 // Clear cache when tab is closed
 chrome.tabs.onRemoved.addListener((tabId) => {
   postCache.clear();
+});
+
+// Add new listener
+chrome.tabs.onActivated.addListener(({ tabId }) => {
+  const cachedUrl = tabCache.get(tabId);
+  if (cachedUrl) {
+    postCache.delete(cachedUrl);
+    tabCache.delete(tabId);
+  }
 }); 
